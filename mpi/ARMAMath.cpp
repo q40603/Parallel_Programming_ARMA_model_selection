@@ -6,7 +6,7 @@
 #include <cmath>
 #include <cstdlib>
 #include "ARMAMath.h"
-
+#include <omp.h>
 double ARMAMath::avgData(std::vector<double> dataArray) {
     return this->sumData(dataArray)/dataArray.size();
 }
@@ -269,6 +269,7 @@ std::vector<double> ARMAMath::computeMACoe(std::vector<double> dataArray, int q)
 
     std::vector<std::vector<double>> tmp (this->LevinsonSolve(paraGarma));
     std::vector<double> MACoe(q+1);
+
     for (int i = 1; i < MACoe.size(); ++i)
     {
         MACoe[i] = -tmp[q][i];
@@ -281,6 +282,7 @@ std::vector<double> ARMAMath::computeMACoe(std::vector<double> dataArray, int q)
 std::vector<double> ARMAMath::computeARMACoe(std::vector<double> dataArray, int p, int q) {
     std::vector<double> allGarma(this->autocovData(dataArray, p + q));
     std::vector<double> garma(p + 1);
+#pragma omp parallel for
     for (int i = 0; i < garma.size(); ++i)
     {
         garma[i] = allGarma[q + i];
@@ -305,6 +307,8 @@ std::vector<double> ARMAMath::computeARMACoe(std::vector<double> dataArray, int 
     }
 
     std::vector<double> paraGarma(q+1);
+#pragma omp parallel
+#pragma omp for reduction (+:sum)
     for (int k = 0; k <= q; ++k)
     {
         double sum = 0.0;
@@ -319,6 +323,7 @@ std::vector<double> ARMAMath::computeARMACoe(std::vector<double> dataArray, int 
     }
     std::vector<std::vector<double>> maResult (this->LevinsonSolve(paraGarma));
     std::vector<double> MACoe(q+1);
+#pragma omp parallel for reduction
     for (int i = 1; i <= q; ++i)
     {
         MACoe[i] = maResult[q][i];
@@ -331,6 +336,7 @@ std::vector<double> ARMAMath::computeARMACoe(std::vector<double> dataArray, int 
 //		MACoe[0] = tmp[tmp.length - 1];
 
     std::vector<double> ARMACoe(p + q + 2);
+#pragma omp parallel for
     for (int i = 0; i < ARMACoe.size(); ++i)
     {
         if (i < ARCoe.size())

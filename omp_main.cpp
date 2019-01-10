@@ -1,59 +1,35 @@
+//
+// Created by yue on 18-3-16.
+//
+
 #include <vector>
 #include "cstdio"
 #include "iostream"
 #include "ARIMAModel.h"
-#include "ARMAMath.h"
 #include <chrono>
 #include <omp.h>
-#include <cmath>
-#pragma optimize level=3
-#pragma GCC optimize("-O3")
-//#define DATA_LIMIT 170
-int DATA_LIMIT;
+#define DATA_LIMIT 170
 struct parameter{
     int p,q;
     double aic;
     std::vector<std::vector<double>> coe;
 };
-double gaussrand()
-{
-    static double V1, V2, S;
-    static int phase = 0;
-    double X;
-    srand(time(NULL));
-    if ( phase == 0 ) {
-        do {
-            double U1 = (double)rand() / RAND_MAX;
-            double U2 = (double)rand() / RAND_MAX;
-            V1 = 2 * U1 - 1;
-            V2 = 2 * U2 - 1;
-            S = V1 * V1 + V2 * V2;
-        } while(S >= 1 || S == 0);
-        X = V1 * sqrt(-2 * log(S) / S);
-    } else
-        X = V2 * sqrt(-2 * log(S) / S);
-    phase = 1 - phase;
-    return X;
-}
+
 int main(int argc, char** argv){
-    if(argc < 3){
+    if(argc < 2){
         printf("Usage: %s <dataset>\n", argv[0]);
-        DATA_LIMIT = atoi(argv[1]);
         return 0;
     }
     freopen(argv[1],"r",stdin);
     int data_count = 1;
     auto total_start = std::chrono::system_clock::now();
-    double input,prev;
+    double input;
     std::vector<double> data;
     while(std::cin>>input){
-        if(data_count!=1)
-            data.push_back(input-prev);
+        data.push_back(input);
         if(++data_count > DATA_LIMIT) break;
-        prev = input;
     }
-    double expect =  data.back();
-    data.pop_back();
+    double expect = data.pop_back();
     double minAIC = 1.7976931348623157E308D;
     std::vector<int> bestModel(3);
         int len = data.size();
@@ -75,10 +51,11 @@ int main(int argc, char** argv){
         }
         parameter model_pool[cnt];
         std::vector<std::vector<double>> coe;
-    #pragma omp parallel for private ( coe,type ) schedule( static, 1 )
+    #pragma omp parallel for private ( coe,type )
         for (int i = 0; i < cnt; ++i)
         {
         //std::cout << "; This thread ID is " << omp_get_thread_num() << std::endl;
+            // 控制选择的参数
             //printf("=====%d, %d=====\n", model[i][0], model[i][1]);
             if (model[i][0] == 0)
             {
@@ -104,39 +81,38 @@ int main(int argc, char** argv){
             model_pool[i].q = model[i][1];
             model_pool[i].coe = coe;
             //std::cout<<aic<<std::endl;
+            // 在求解过程中如果阶数选取过长，可能会出现NAN或者无穷大的情况
         }
 
         std::vector<std::vector<double>> best_coe;
-        int best_record = 0;
-    #pragma omp parallel for shared(minAIC,best_record) schedule( static, 1 )
         for (int i = 0; i < cnt; ++i){
             if (model_pool[i].aic<=1.7976931348623157E308D && !std::isnan(model_pool[i].aic) && model_pool[i].aic < minAIC)
             {
-            //#pragma omp critical    
-                best_record = i;
                 minAIC = model_pool[i].aic;
-            }
+               // std::cout<<aic<<std::endl;
+                bestModel[0] = model_pool[i].p;
+                bestModel[1] = model_pool[i].q;
+                bestModel[2] = (int)std::round(minAIC);
+                best_coe = model_pool[i].coe;
+                //printf("%d, %d, %d\n", bestModel[0], bestModel[1], predictValue(bestModel[0], bestModel[1]));
+            }            
         }
-               bestModel[0] = model_pool[best_record].p;
-                bestModel[1] = model_pool[best_record].q;
-                bestModel[2] = (int)std::round(model_pool[best_record].aic);
-                best_coe = model_pool[best_record].coe;
+
 //------------------  predict  ------------------------------------------------
-        double predict = 0.0;
+        int predict = 0;
         double tmpAR = 0.0, tmpMA = 0.0;
         std::vector<double> errData(bestModel[1] + 1);
-        int p = bestModel[0], q = bestModel[1];
-        if (p == 0)
+        if (bestModel[0] == 0)
         {
             std::vector<double> maCoe(best_coe[0]);
-            for(int k = q; k < len; ++k)
+            for(int k = q; k < n; ++k)
             {
                 tmpMA = 0;
                 for(int i = 1; i <= q; ++i)
                 {
                     tmpMA += maCoe[i] * errData[i];
                 }
-                //white noise
+                //产生各个时刻的噪声
                 for(int j = q; j > 0; --j)
                 {
                     errData[j] = errData[j - 1];
@@ -144,12 +120,13 @@ int main(int argc, char** argv){
                 errData[0] = gaussrand()*std::sqrt(maCoe[0]);
             }
 
-            predict = tmpMA; //predict
+            predict = (int)(tmpMA); //产生预测
         }
-        else if (q == 0)
+        else if (bestModel[1] == 0)
         {
             std::vector<double> arCoe(best_coe[0]);
-            for(int k = p; k < len; ++k)
+
+            for(int k = p; k < n; ++k)
             {
                 tmpAR = 0;
                 for(int i = 0; i < p; ++i)
@@ -157,13 +134,13 @@ int main(int argc, char** argv){
                     tmpAR += arCoe[i] * data[k - i - 1];
                 }
             }
-            predict = tmpAR;
+            predict = (int)(tmpAR);
         }
         else
         {
             std::vector<double> arCoe(best_coe[0]);
             std::vector<double> maCoe(best_coe[1]);
-            for(int k = p; k < len; ++k)
+            for(int k = p; k < n; ++k)
             {
                 tmpAR = 0;
                 tmpMA = 0;
@@ -176,7 +153,7 @@ int main(int argc, char** argv){
                     tmpMA += maCoe[i] * errData[i];
                 }
 
-                //white noise
+                //产生各个时刻的噪声
                 for(int j = q; j > 0; --j)
                 {
                     errData[j] = errData[j-1];
@@ -185,7 +162,7 @@ int main(int argc, char** argv){
                 errData[0] = gaussrand() * std::sqrt(maCoe[0]);
             }
 
-            predict = tmpAR + tmpMA;
+            predict = (int)(tmpAR + tmpMA);
         }
 
 
@@ -195,7 +172,7 @@ int main(int argc, char** argv){
 
     printf("Best model:\n");
     printf("p: %d,\tq: %d\n", bestModel[0], bestModel[1]);
-    printf("Predict: %lf,\tExpect: %lf\n", predict + prev, input);
+    printf("Predict: %d,\tExpect: %lf\n", predict, expect);
     auto total_end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = total_end - total_start;
     printf("Total time: %lf\n", elapsed_seconds.count());

@@ -28,10 +28,11 @@ public:
 
         std::vector<double> armaCoe(ar_math.computeARMACoe(this->data,p,q));
         std::vector<double> arCoe(this->p+1);
+    #pragma omp parallel for
         for(int i=0;i<arCoe.size();i++) arCoe[i]=armaCoe[i];
 
         std::vector<double>  maCoe(this->q+1);
-
+    #pragma omp parallel for
         for(int i=0;i<maCoe.size();i++) {
             maCoe[i] = armaCoe[i+this->p+1];
         }

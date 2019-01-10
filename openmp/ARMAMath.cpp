@@ -6,7 +6,10 @@
 #include <cmath>
 #include <cstdlib>
 #include "ARMAMath.h"
-
+#include <omp.h>
+#include <cmath>
+#pragma optimize level=3
+#pragma GCC optimize("-O3")
 double ARMAMath::avgData(std::vector<double> dataArray) {
     return this->sumData(dataArray)/dataArray.size();
 }
@@ -43,6 +46,7 @@ std::vector<double>  ARMAMath::autocorData(std::vector<double> dataArray, int or
     std::vector<double>  autoCov(this->autocovData(dataArray,order));
     double varData=this->varerrData(dataArray);
     if(varData!=0) {
+        #pragma omp parallel for schedule( static, 1 )
         for (int i = 0; i < order ; i++) {
             autoCor[i]=autoCov[i]/varData;
         }
@@ -74,7 +78,8 @@ double ARMAMath::mutalCorr(std::vector<double> dataFir, std::vector<double> data
 
     if(dataFir.size()!=dataSec.size()) len= (int) std::min(dataFir.size(), dataSec.size());
     else len= static_cast<int>(dataFir.size());
-
+    #pragma omp parallel
+    #pragma omp parallel for reduction( +:sumX,sumY,sumXY,sumXSq,sumYSq)
     for(int i=0;i<len;i++){
         sumX+=dataFir[i];
         sumY+=dataSec[i];
@@ -230,7 +235,7 @@ std::vector<double> ARMAMath::computeARCoe(std::vector<double> dataArray, int p)
     std::vector<std::vector<double>> result(this->LevinsonSolve(garma));
 
     std::vector<double> ARCoe(p+1);
-
+    #pragma omp parallel for schedule( static, 1 )
     for(int i=0;i<p;i++){
         ARCoe[i] = result[p][i+1];
 
@@ -251,6 +256,7 @@ std::vector<double> ARMAMath::computeMACoe(std::vector<double> dataArray, int q)
 
     std::vector<double> alpha(p+1);
     alpha[0] = -1;
+    #pragma omp parallel for schedule( static, 1 )
     for (int i = 1; i <= p; ++i)
     {
         alpha[i] = bestResult[p][i];
@@ -289,6 +295,7 @@ std::vector<double> ARMAMath::computeARMACoe(std::vector<double> dataArray, int 
 
     // AR
     std::vector<double> ARCoe(p+1);
+    #pragma omp parallel for schedule( static, 1 )
     for (int i = 0; i < p; ++i)
     {
         ARCoe[i] = arResult[p][i + 1];
@@ -299,6 +306,7 @@ std::vector<double> ARMAMath::computeARMACoe(std::vector<double> dataArray, int 
     // MA
     std::vector<double> alpha(p+1);
     alpha[0] = -1;
+    #pragma omp parallel for schedule( static, 1 )
     for (int i = 1; i <= p; ++i)
     {
         alpha[i] = ARCoe[i - 1];
@@ -319,6 +327,7 @@ std::vector<double> ARMAMath::computeARMACoe(std::vector<double> dataArray, int 
     }
     std::vector<std::vector<double>> maResult (this->LevinsonSolve(paraGarma));
     std::vector<double> MACoe(q+1);
+    #pragma omp parallel for schedule( static, 1 )
     for (int i = 1; i <= q; ++i)
     {
         MACoe[i] = maResult[q][i];

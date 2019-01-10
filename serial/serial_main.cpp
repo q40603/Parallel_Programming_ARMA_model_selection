@@ -5,8 +5,9 @@
 #include "cstdio"
 #include "iostream"
 #include "ARIMAModel.h"
-#include <chrono>
 
+#include <chrono>
+#include <cmath>
 #define DATA_LIMIT 170
 
 int main(int argc, char** argv){
@@ -19,11 +20,13 @@ int main(int argc, char** argv){
     auto total_start = std::chrono::system_clock::now();
 
     int data_count = 1;
+    double input,prev;
     std::vector<double> dataArray;
-    double input;
-   	while(std::cin>>input){
-        dataArray.push_back(input);
+    while(std::cin>>input){
+        if(data_count!=1)
+            dataArray.push_back(input-prev);
         if(++data_count > DATA_LIMIT) break;
+        prev = input;
     }
     printf("Data Size: %u\n", dataArray.size());
     double expect = dataArray.back();
